@@ -1,6 +1,12 @@
 /**
- * 八字排盘核心算法
- * 包含四柱计算、十神分析、五行统计、大运推算等功能
+ * 八字排盘核心算法（修正版）
+ *
+ * 修正内容：
+ * 1. 日柱：基准日 1900-01-31 为甲辰日（六十甲子序40），修正原地支基准错位
+ * 2. 月柱：修正月干、月支各差一位的错误
+ * 3. 节气：采用寿星公式计算每年真实节气日期（1900-2099，误差±1天）
+ * 4. 晚子时：23:00 后出生按次日子时论命（子平法传统）
+ * 5. 起运：按出生日至前/后节气天数折三计算
  */
 
 // 天干
@@ -25,12 +31,6 @@ const WU_XING = {
 const TIAN_GAN_YIN_YANG = {
   '甲': '阳', '乙': '阴', '丙': '阳', '丁': '阴', '戊': '阳',
   '己': '阴', '庚': '阳', '辛': '阴', '壬': '阳', '癸': '阴'
-}
-
-// 地支阴阳
-const DI_ZHI_YIN_YANG = {
-  '子': '阳', '丑': '阴', '寅': '阳', '卯': '阴', '辰': '阳', '巳': '阴',
-  '午': '阳', '未': '阴', '申': '阳', '酉': '阴', '戌': '阳', '亥': '阴'
 }
 
 // 十神关系（以日干为基准）
@@ -63,41 +63,90 @@ const DI_ZHI_CANG_GAN = {
   '亥': ['壬', '甲']
 }
 
-// 节气数据（简化版，实际应用中需要更精确的数据）
-const JIE_QI = [
-  { name: '立春', month: 2, day: 4 },
-  { name: '惊蛰', month: 3, day: 6 },
-  { name: '清明', month: 4, day: 5 },
-  { name: '立夏', month: 5, day: 6 },
-  { name: '芒种', month: 6, day: 6 },
-  { name: '小暑', month: 7, day: 7 },
-  { name: '立秋', month: 8, day: 8 },
-  { name: '白露', month: 9, day: 8 },
-  { name: '寒露', month: 10, day: 8 },
-  { name: '立冬', month: 11, day: 7 },
-  { name: '大雪', month: 12, day: 7 },
-  { name: '小寒', month: 1, day: 6 }
+/**
+ * 十二"节"（月建分界），按节气顺序排列
+ * branchIndex: 该节所起月份的月支（寅月始于立春）
+ * c21: 21世纪寿星公式常数（20世纪 +1）
+ */
+const JIE_LIST = [
+  { name: '立春', month: 2, branchIndex: 2, c21: 3.87 },
+  { name: '惊蛰', month: 3, branchIndex: 3, c21: 5.63 },
+  { name: '清明', month: 4, branchIndex: 4, c21: 4.81 },
+  { name: '立夏', month: 5, branchIndex: 5, c21: 5.52 },
+  { name: '芒种', month: 6, branchIndex: 6, c21: 5.678 },
+  { name: '小暑', month: 7, branchIndex: 7, c21: 7.108 },
+  { name: '立秋', month: 8, branchIndex: 8, c21: 7.5 },
+  { name: '白露', month: 9, branchIndex: 9, c21: 7.646 },
+  { name: '寒露', month: 10, branchIndex: 10, c21: 8.318 },
+  { name: '立冬', month: 11, branchIndex: 11, c21: 7.438 },
+  { name: '大雪', month: 12, branchIndex: 0, c21: 7.18 },
+  { name: '小寒', month: 1, branchIndex: 1, c21: 5.4055 }
 ]
 
 /**
- * 计算年柱
- * @param {number} year - 年份
- * @param {number} month - 月份
- * @param {number} day - 日期
- * @returns {object} 年柱信息
+ * 寿星公式计算某年某"节"的日期
+ * 公式：[Y×D+C]−L，Y=年份后两位，D=0.2422
+ * 1-2月的节 L=⌊(Y−1)/4⌋，其余 L=⌊Y/4⌋
+ * （非闰世纪年如1900/2100年，Y=0时1-2月L=0）
+ * 适用 1900-2099 年，误差 ±1 天
+ */
+function getJieQiDay(year, jie) {
+  const Y = year % 100
+  let C = jie.c21
+  if (year < 2001) C += 1 // 20世纪常数
+
+  let L
+  if (jie.month <= 2) {
+    if (Y === 0 && year % 400 !== 0) {
+      L = 0 // 1900/2100 等非闰世纪年
+    } else {
+      L = Math.floor((Y - 1) / 4)
+    }
+  } else {
+    L = Math.floor(Y / 4)
+  }
+  return Math.floor(Y * 0.2422 + C) - L
+}
+
+/** 获取某年某"节"的完整日期对象 */
+function getJieQiDate(year, jie) {
+  return new Date(year, jie.month - 1, getJieQiDay(year, jie))
+}
+
+/**
+ * 确定日期所处的"节"（月建）
+ * @returns {{ jie: object, jieYear: number }} 节信息及其所属年份
+ */
+function getCurrentJie(year, month, day) {
+  const date = new Date(year, month - 1, day)
+  // 小寒在上一年12月之后、本年立春之前，需要跨年比较
+  // 构造候选节列表：上一年大雪、本年全部12节
+  const candidates = []
+  for (const jie of JIE_LIST) {
+    candidates.push({ jie, year: year - 1, date: getJieQiDate(year - 1, jie) })
+    candidates.push({ jie, year, date: getJieQiDate(year, jie) })
+  }
+  candidates.sort((a, b) => a.date - b.date)
+
+  let current = null
+  for (const c of candidates) {
+    if (date >= c.date) current = c
+    else break
+  }
+  return current
+}
+
+/**
+ * 计算年柱（以立春为岁首）
  */
 function calculateYearPillar(year, month, day) {
-  // 以立春为界确定年份
-  const liChun = JIE_QI.find(jq => jq.name === '立春')
-  let nian = year
-  
-  if (month < liChun.month || (month === liChun.month && day < liChun.day)) {
-    nian = year - 1
-  }
-  
-  const ganIndex = (nian - 4) % 10
-  const zhiIndex = (nian - 4) % 12
-  
+  const date = new Date(year, month - 1, day)
+  const liChun = getJieQiDate(year, JIE_LIST[0]) // 立春
+  const nian = date < liChun ? year - 1 : year
+
+  const ganIndex = ((nian - 4) % 10 + 10) % 10
+  const zhiIndex = ((nian - 4) % 12 + 12) % 12
+
   return {
     gan: TIAN_GAN[ganIndex],
     zhi: DI_ZHI[zhiIndex],
@@ -107,58 +156,43 @@ function calculateYearPillar(year, month, day) {
 }
 
 /**
- * 计算月柱
- * @param {number} year - 年份
- * @param {number} month - 月份
- * @param {number} day - 日期
- * @returns {object} 月柱信息
+ * 计算月柱（以十二节为月界）
+ * 年上起月法：甲己之年丙作首，乙庚之岁戊为头，
+ * 丙辛之岁寻庚起，丁壬壬位顺行流，戊癸甲寅求。
  */
 function calculateMonthPillar(year, month, day) {
-  // 确定节气月份
-  let jieMonth = month
-  for (let i = JIE_QI.length - 1; i >= 0; i--) {
-    const jq = JIE_QI[i]
-    if (month > jq.month || (month === jq.month && day >= jq.day)) {
-      jieMonth = jq.month
-      break
-    }
-  }
-  
-  // 月干根据年干确定
+  const current = getCurrentJie(year, month, day)
+  const branchIndex = current.jie.branchIndex // 月支
+  // 月干偏移：寅月为0，顺推
+  const offset = (branchIndex - 2 + 12) % 12
+
+  // 月干依年干而定；注意未过立春时按上一岁年干
   const yearGan = calculateYearPillar(year, month, day).gan
   const yearGanIndex = TIAN_GAN.indexOf(yearGan)
-  
-  // 甲己之年丙作首，乙庚之岁戊为头，丙辛之岁寻庚起，丁壬壬位顺行流，戊癸之年何方发，甲寅之上好追求
   const monthGanStart = [2, 4, 6, 8, 0][yearGanIndex % 5] // 丙戊庚壬甲
-  const monthGanIndex = (monthGanStart + jieMonth - 1) % 10
-  
-  // 月支
-  const monthZhiIndex = (jieMonth + 1) % 12
-  
+  const ganIndex = (monthGanStart + offset) % 10
+
   return {
-    gan: TIAN_GAN[monthGanIndex],
-    zhi: DI_ZHI[monthZhiIndex],
-    ganZhi: TIAN_GAN[monthGanIndex] + DI_ZHI[monthZhiIndex],
-    month: jieMonth
+    gan: TIAN_GAN[ganIndex],
+    zhi: DI_ZHI[branchIndex],
+    ganZhi: TIAN_GAN[ganIndex] + DI_ZHI[branchIndex],
+    jieQi: current.jie.name
   }
 }
 
 /**
  * 计算日柱
- * @param {number} year - 年份
- * @param {number} month - 月份
- * @param {number} day - 日期
- * @returns {object} 日柱信息
+ * 基准：1900年1月31日为甲辰日（六十甲子序40）
  */
 function calculateDayPillar(year, month, day) {
-  // 使用已知基准日计算（1900年1月31日为甲辰日）
   const baseDate = new Date(1900, 0, 31)
   const targetDate = new Date(year, month - 1, day)
-  const diffDays = Math.floor((targetDate - baseDate) / (1000 * 60 * 60 * 24))
-  
-  const ganIndex = (diffDays % 10 + 10) % 10
-  const zhiIndex = (diffDays % 12 + 12) % 12
-  
+  const diffDays = Math.round((targetDate - baseDate) / 86400000)
+
+  const idx = ((40 + diffDays) % 60 + 60) % 60
+  const ganIndex = idx % 10
+  const zhiIndex = idx % 12
+
   return {
     gan: TIAN_GAN[ganIndex],
     zhi: DI_ZHI[zhiIndex],
@@ -168,12 +202,10 @@ function calculateDayPillar(year, month, day) {
 
 /**
  * 计算时柱
- * @param {string} dayGan - 日干
- * @param {number} hour - 小时
- * @returns {object} 时柱信息
+ * 日上起时法：甲己还加甲，乙庚丙作初，
+ * 丙辛从戊起，丁壬庚子居，戊癸壬子真。
  */
 function calculateHourPillar(dayGan, hour) {
-  // 时辰划分
   const shiChen = [
     { start: 23, end: 1, name: '子时' },
     { start: 1, end: 3, name: '丑时' },
@@ -188,131 +220,109 @@ function calculateHourPillar(dayGan, hour) {
     { start: 19, end: 21, name: '戌时' },
     { start: 21, end: 23, name: '亥时' }
   ]
-  
-  // 确定时辰
+
   let shiChenIndex = 0
   for (let i = 0; i < shiChen.length; i++) {
     const sc = shiChen[i]
     if (sc.start > sc.end) {
-      // 跨天的情况（子时）
-      if (hour >= sc.start || hour < sc.end) {
-        shiChenIndex = i
-        break
-      }
+      if (hour >= sc.start || hour < sc.end) { shiChenIndex = i; break }
     } else {
-      if (hour >= sc.start && hour < sc.end) {
-        shiChenIndex = i
-        break
-      }
+      if (hour >= sc.start && hour < sc.end) { shiChenIndex = i; break }
     }
   }
-  
-  // 时干根据日干确定
+
   const dayGanIndex = TIAN_GAN.indexOf(dayGan)
-  
-  // 甲己还加甲，乙庚丙作初，丙辛从戊起，丁壬庚子居，戊癸何方发，壬子是真途
   const hourGanStart = [0, 2, 4, 6, 8][dayGanIndex % 5] // 甲丙戊庚壬
-  const hourGanIndex = (hourGanStart + shiChenIndex) % 10
-  
+  const ganIndex = (hourGanStart + shiChenIndex) % 10
+
   return {
-    gan: TIAN_GAN[hourGanIndex],
+    gan: TIAN_GAN[ganIndex],
     zhi: DI_ZHI[shiChenIndex],
-    ganZhi: TIAN_GAN[hourGanIndex] + DI_ZHI[shiChenIndex],
+    ganZhi: TIAN_GAN[ganIndex] + DI_ZHI[shiChenIndex],
     shiChen: shiChen[shiChenIndex].name
   }
 }
 
-/**
- * 计算十神
- * @param {string} dayGan - 日干
- * @param {string} targetGan - 目标天干
- * @returns {string} 十神名称
- */
+/** 计算十神 */
 function calculateShiShen(dayGan, targetGan) {
   return SHI_SHEN_RELATIONS[dayGan][targetGan]
 }
 
-/**
- * 分析五行
- * @param {object} bazi - 八字对象
- * @returns {object} 五行分析结果
- */
+/** 分析五行旺衰 */
 function analyzeWuXing(bazi) {
   const wuXingCount = { '金': 0, '木': 0, '水': 0, '火': 0, '土': 0 }
   const wuXingDetails = []
-  
-  // 统计四柱天干的五行
+
   const pillars = ['year', 'month', 'day', 'hour']
   pillars.forEach(pillar => {
     const gan = bazi[pillar].gan
     const zhi = bazi[pillar].zhi
-    
-    // 天干五行
+
     const ganWuXing = WU_XING[gan]
     wuXingCount[ganWuXing]++
-    wuXingDetails.push({
-      position: `${pillar}干`,
-      character: gan,
-      wuXing: ganWuXing
-    })
-    
-    // 地支五行
+    wuXingDetails.push({ position: `${pillar}干`, character: gan, wuXing: ganWuXing })
+
     const zhiWuXing = WU_XING[zhi]
     wuXingCount[zhiWuXing]++
-    wuXingDetails.push({
-      position: `${pillar}支`,
-      character: zhi,
-      wuXing: zhiWuXing
-    })
-    
-    // 地支藏干
-    const cangGan = DI_ZHI_CANG_GAN[zhi]
-    cangGan.forEach(gan => {
-      const ganWuXing = WU_XING[gan]
-      wuXingCount[ganWuXing] += 0.5 // 藏干权重较轻
-      wuXingDetails.push({
-        position: `${pillar}支藏干`,
-        character: gan,
-        wuXing: ganWuXing
-      })
+    wuXingDetails.push({ position: `${pillar}支`, character: zhi, wuXing: zhiWuXing })
+
+    DI_ZHI_CANG_GAN[zhi].forEach(g => {
+      const gWuXing = WU_XING[g]
+      wuXingCount[gWuXing] += 0.5 // 藏干权重减半
+      wuXingDetails.push({ position: `${pillar}支藏干`, character: g, wuXing: gWuXing })
     })
   })
-  
-  // 判断五行旺衰
+
   const dayGanWuXing = WU_XING[bazi.day.gan]
   const isWang = wuXingCount[dayGanWuXing] >= 3
-  
+
   return {
     count: wuXingCount,
     details: wuXingDetails,
     dayMasterWuXing: dayGanWuXing,
-    isWang: isWang,
+    isWang,
     strongest: Object.entries(wuXingCount).sort((a, b) => b[1] - a[1])[0][0],
     weakest: Object.entries(wuXingCount).sort((a, b) => a[1] - b[1])[0][0]
   }
 }
 
 /**
- * 计算大运
- * @param {object} bazi - 八字对象
- * @param {string} gender - 性别
- * @returns {array} 大运数组
+ * 计算大运（含起运年龄）
+ * 阳男阴女顺行，阴男阳女逆行；
+ * 起运数 = 出生日至前/后"节"的天数 ÷ 3（三天折一年）
  */
-function calculateDaYun(bazi, gender) {
-  const yearGan = bazi.year.gan
-  const yearGanYinYang = TIAN_GAN_YIN_YANG[yearGan]
-  
-  // 确定大运顺逆
-  // 阳年男顺，阴年男逆；阳年女逆，阴年女顺
-  const isShun = (yearGanYinYang === '阳' && gender === '男') || (yearGanYinYang === '阴' && gender === '女')
-  
+function calculateDaYun(bazi, gender, year, month, day) {
+  const yearGanYinYang = TIAN_GAN_YIN_YANG[bazi.year.gan]
+  const isShun = (yearGanYinYang === '阳' && gender === '男') ||
+                 (yearGanYinYang === '阴' && gender === '女')
+
+  // 计算起运天数
+  const birthDate = new Date(year, month - 1, day)
+  const candidates = []
+  for (const jie of JIE_LIST) {
+    for (const y of [year - 1, year, year + 1]) {
+      candidates.push(getJieQiDate(y, jie))
+    }
+  }
+  candidates.sort((a, b) => a - b)
+
+  let qiYunDays = 3
+  if (isShun) {
+    const next = candidates.find(d => d > birthDate)
+    if (next) qiYunDays = Math.max(1, Math.round((next - birthDate) / 86400000))
+  } else {
+    const prevList = candidates.filter(d => d <= birthDate)
+    const prev = prevList[prevList.length - 1]
+    if (prev) qiYunDays = Math.max(1, Math.round((birthDate - prev) / 86400000))
+  }
+  const qiYunAge = Math.max(1, Math.round(qiYunDays / 3))
+
   const daYun = []
   const startZhiIndex = DI_ZHI.indexOf(bazi.month.zhi)
   const startGanIndex = TIAN_GAN.indexOf(bazi.month.gan)
-  
+
   for (let i = 1; i <= 10; i++) {
     let zhiIndex, ganIndex
-    
     if (isShun) {
       zhiIndex = (startZhiIndex + i) % 12
       ganIndex = (startGanIndex + i) % 10
@@ -320,43 +330,36 @@ function calculateDaYun(bazi, gender) {
       zhiIndex = (startZhiIndex - i + 12) % 12
       ganIndex = (startGanIndex - i + 10) % 10
     }
-    
     daYun.push({
       ganZhi: TIAN_GAN[ganIndex] + DI_ZHI[zhiIndex],
       gan: TIAN_GAN[ganIndex],
       zhi: DI_ZHI[zhiIndex],
-      age: 3 + (i - 1) * 10, // 简化计算，实际需要考虑节气
+      age: qiYunAge + (i - 1) * 10,
       shiShen: calculateShiShen(bazi.day.gan, TIAN_GAN[ganIndex])
     })
   }
-  
   return daYun
 }
 
 /**
  * 主函数：计算八字
- * @param {number} year - 出生年
- * @param {number} month - 出生月
- * @param {number} day - 出生日
- * @param {number} hour - 出生时
- * @param {string} gender - 性别
- * @returns {object} 完整的八字分析结果
+ * 晚子时（23:00-24:00）按次日论命
  */
 export function calculateBaZi(year, month, day, hour, gender) {
-  // 计算四柱
-  const yearPillar = calculateYearPillar(year, month, day)
-  const monthPillar = calculateMonthPillar(year, month, day)
-  const dayPillar = calculateDayPillar(year, month, day)
-  const hourPillar = calculateHourPillar(dayPillar.gan, hour)
-  
-  const bazi = {
-    year: yearPillar,
-    month: monthPillar,
-    day: dayPillar,
-    hour: hourPillar
+  // 晚子时处理：23点后日柱按次日
+  let y = year, m = month, d = day
+  if (hour >= 23) {
+    const next = new Date(year, month - 1, day + 1)
+    y = next.getFullYear(); m = next.getMonth() + 1; d = next.getDate()
   }
-  
-  // 计算十神
+
+  const yearPillar = calculateYearPillar(y, m, d)
+  const monthPillar = calculateMonthPillar(y, m, d)
+  const dayPillar = calculateDayPillar(y, m, d)
+  const hourPillar = calculateHourPillar(dayPillar.gan, hour)
+
+  const bazi = { year: yearPillar, month: monthPillar, day: dayPillar, hour: hourPillar }
+
   const shiShen = {
     year: {
       gan: calculateShiShen(dayPillar.gan, yearPillar.gan),
@@ -375,16 +378,11 @@ export function calculateBaZi(year, month, day, hour, gender) {
       zhi: calculateShiShen(dayPillar.gan, DI_ZHI_CANG_GAN[hourPillar.zhi][0])
     }
   }
-  
-  // 分析五行
+
   const wuXing = analyzeWuXing(bazi)
-  
-  // 计算大运
-  const daYun = calculateDaYun(bazi, gender)
-  
-  // 生成解读
+  const daYun = calculateDaYun(bazi, gender, y, m, d)
   const interpretation = generateInterpretation(bazi, shiShen, wuXing, daYun)
-  
+
   return {
     bazi,
     shiShen,
@@ -395,32 +393,24 @@ export function calculateBaZi(year, month, day, hour, gender) {
       birthDate: `${year}年${month}月${day}日 ${hour}时`,
       gender,
       dayMaster: dayPillar.gan,
-      dayMasterWuXing: wuXing.dayMasterWuXing
+      dayMasterWuXing: wuXing.dayMasterWuXing,
+      lateZiShi: hour >= 23 // 标记晚子时
     }
   }
 }
 
-/**
- * 生成命理解读
- * @param {object} bazi - 八字
- * @param {object} shiShen - 十神
- * @param {object} wuXing - 五行分析
- * @param {array} daYun - 大运
- * @returns {object} 解读内容
- */
+/** 生成命理解读 */
 function generateInterpretation(bazi, shiShen, wuXing, daYun) {
   const dayMaster = bazi.day.gan
   const dayMasterWuXing = wuXing.dayMasterWuXing
-  
-  // 日主强弱分析
-  const strengthText = wuXing.isWang 
+
+  const strengthText = wuXing.isWang
     ? `${dayMaster}日主得令得地，身强有力，能担财官`
     : `${dayMaster}日主失令失地，身弱需扶，宜印比相助`
-  
-  // 五行分析
-  const wuXingText = `五行分布：金${wuXing.count['金']}、木${wuXing.count['木']}、水${wuXing.count['水']}、火${wuXing.count['火']}、土${wuXing.count['土']}。最旺为${wuXing.strongest}，最弱为${wuXing.weakest}。`
-  
-  // 性格分析（简化版）
+
+  const fmt = v => Number.isInteger(v) ? v : v.toFixed(1)
+  const wuXingText = `五行分布：金${fmt(wuXing.count['金'])}、木${fmt(wuXing.count['木'])}、水${fmt(wuXing.count['水'])}、火${fmt(wuXing.count['火'])}、土${fmt(wuXing.count['土'])}。最旺为${wuXing.strongest}，最弱为${wuXing.weakest}。`
+
   const personalityTraits = {
     '甲': '仁慈正直，有领导才能，但性急',
     '乙': '温柔随和，善于交际，但优柔寡断',
@@ -433,13 +423,11 @@ function generateInterpretation(bazi, shiShen, wuXing, daYun) {
     '壬': '聪明机智，善于变通，但多变',
     '癸': '温柔善良，有艺术天赋，但多愁善感'
   }
-  
   const personalityText = `性格特点：${personalityTraits[dayMaster] || '性格平和，为人正直'}`
-  
-  // 大运简析
+
   const currentDaYun = daYun[0]
   const daYunText = `当前大运：${currentDaYun.ganZhi}（${currentDaYun.age}岁起运），十神为${currentDaYun.shiShen}，此运${currentDaYun.shiShen === '正官' || currentDaYun.shiShen === '正财' ? '较为顺利' : '需谨慎行事'}。`
-  
+
   return {
     summary: `${dayMaster}日主，${dayMasterWuXing}命。${strengthText}`,
     personality: personalityText,
@@ -452,72 +440,35 @@ function generateInterpretation(bazi, shiShen, wuXing, daYun) {
   }
 }
 
-/**
- * 阳历转阴历（简化版）
- * @param {number} year - 年份
- * @param {number} month - 月份
- * @param {number} day - 日期
- * @returns {object} 阴历日期
- */
+/** 阳历转阴历（占位，建议使用完整农历库） */
 export function solarToLunar(year, month, day) {
-  // 这里简化处理，实际应用中需要完整的农历转换算法
-  // 可以使用 lunisolar 库
-  return {
-    year,
-    month,
-    day,
-    isLeap: false
-  }
+  return { year, month, day, isLeap: false }
 }
 
-/**
- * 获取生肖
- * @param {string} zhi - 地支
- * @returns {string} 生肖
- */
+/** 获取生肖 */
 export function getShengXiao(zhi) {
   const shengXiao = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪']
-  const index = DI_ZHI.indexOf(zhi)
-  return shengXiao[index]
+  return shengXiao[DI_ZHI.indexOf(zhi)]
 }
 
-/**
- * 获取纳音
- * @param {string} ganZhi - 干支
- * @returns {string} 纳音
- */
+/** 获取纳音 */
 export function getNaYin(ganZhi) {
   const naYinMap = {
-    '甲子': '海中金', '乙丑': '海中金',
-    '丙寅': '炉中火', '丁卯': '炉中火',
-    '戊辰': '大林木', '己巳': '大林木',
-    '庚午': '路旁土', '辛未': '路旁土',
-    '壬申': '剑锋金', '癸酉': '剑锋金',
-    '甲戌': '山头火', '乙亥': '山头火',
-    '丙子': '涧下水', '丁丑': '涧下水',
-    '戊寅': '城头土', '己卯': '城头土',
-    '庚辰': '白蜡金', '辛巳': '白蜡金',
-    '壬午': '杨柳木', '癸未': '杨柳木',
-    '甲申': '泉中水', '乙酉': '泉中水',
-    '丙戌': '屋上土', '丁亥': '屋上土',
-    '戊子': '霹雳火', '己丑': '霹雳火',
-    '庚寅': '松柏木', '辛卯': '松柏木',
-    '壬辰': '长流水', '癸巳': '长流水',
-    '甲午': '沙中金', '乙未': '沙中金',
-    '丙申': '山下火', '丁酉': '山下火',
-    '戊戌': '平地木', '己亥': '平地木',
-    '庚子': '壁上土', '辛丑': '壁上土',
-    '壬寅': '金箔金', '癸卯': '金箔金',
-    '甲辰': '覆灯火', '乙巳': '覆灯火',
-    '丙午': '天河水', '丁未': '天河水',
-    '戊申': '大驿土', '己酉': '大驿土',
-    '庚戌': '钗钏金', '辛亥': '钗钏金',
-    '壬子': '桑柘木', '癸丑': '桑柘木',
-    '甲寅': '大溪水', '乙卯': '大溪水',
-    '丙辰': '沙中土', '丁巳': '沙中土',
-    '戊午': '天上火', '己未': '天上火',
-    '庚申': '石榴木', '辛酉': '石榴木',
-    '壬戌': '大海水', '癸亥': '大海水'
+    '甲子': '海中金', '乙丑': '海中金', '丙寅': '炉中火', '丁卯': '炉中火',
+    '戊辰': '大林木', '己巳': '大林木', '庚午': '路旁土', '辛未': '路旁土',
+    '壬申': '剑锋金', '癸酉': '剑锋金', '甲戌': '山头火', '乙亥': '山头火',
+    '丙子': '涧下水', '丁丑': '涧下水', '戊寅': '城头土', '己卯': '城头土',
+    '庚辰': '白蜡金', '辛巳': '白蜡金', '壬午': '杨柳木', '癸未': '杨柳木',
+    '甲申': '泉中水', '乙酉': '泉中水', '丙戌': '屋上土', '丁亥': '屋上土',
+    '戊子': '霹雳火', '己丑': '霹雳火', '庚寅': '松柏木', '辛卯': '松柏木',
+    '壬辰': '长流水', '癸巳': '长流水', '甲午': '沙中金', '乙未': '沙中金',
+    '丙申': '山下火', '丁酉': '山下火', '戊戌': '平地木', '己亥': '平地木',
+    '庚子': '壁上土', '辛丑': '壁上土', '壬寅': '金箔金', '癸卯': '金箔金',
+    '甲辰': '覆灯火', '乙巳': '覆灯火', '丙午': '天河水', '丁未': '天河水',
+    '戊申': '大驿土', '己酉': '大驿土', '庚戌': '钗钏金', '辛亥': '钗钏金',
+    '壬子': '桑柘木', '癸丑': '桑柘木', '甲寅': '大溪水', '乙卯': '大溪水',
+    '丙辰': '沙中土', '丁巳': '沙中土', '戊午': '天上火', '己未': '天上火',
+    '庚申': '石榴木', '辛酉': '石榴木', '壬戌': '大海水', '癸亥': '大海水'
   }
   return naYinMap[ganZhi] || '未知'
 }
