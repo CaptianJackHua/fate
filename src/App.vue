@@ -73,4 +73,28 @@ const initCloud = () => {
   position: relative;
   z-index: 1;
 }
+
+/* H5 端限制页面宽度为 375px 居中显示（模拟手机宽度） */
+/* #ifdef H5 */
+body {
+  background: #d8d0c0;
+}
+
+uni-page {
+  max-width: 375px;
+  margin: 0 auto;
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.15);
+}
+
+uni-tabbar {
+  max-width: 375px;
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%);
+}
+
+uni-tabbar .uni-tabbar {
+  max-width: 375px;
+}
+/* #endif */
 </style>

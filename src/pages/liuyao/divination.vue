@@ -187,7 +187,8 @@ const canStart = computed(() => {
     case 'number':
       return number1.value && number2.value && number3.value
     case 'coins':
-      return currentYao.value > 6
+      // 铜钱摇卦按钮兼作"摇卦/记录爻"按钮，必须始终可点击
+      return true
     case 'time':
     case 'random':
       return true
@@ -230,11 +231,10 @@ const startDivination = () => {
     // 记录当前铜钱结果
     coinResults.value.push(...currentCoins.value)
     currentYao.value++
-    
-    // 重置铜钱
-    currentCoins.value = ['正', '正', '正']
-    
+
     if (currentYao.value <= 6) {
+      // 模拟重新摇卦：随机生成下一次的三枚铜钱
+      currentCoins.value = [0, 1, 2].map(() => Math.random() < 0.5 ? '正' : '反')
       return
     }
   }
@@ -441,6 +441,7 @@ const saveDivinationRecord = (result) => {
       font-weight: 700;
       transition: $transition-normal;
       box-shadow: $shadow-md;
+      cursor: pointer;
       
       &.heads {
         background: linear-gradient(135deg, #ffd700, #ffed4a);

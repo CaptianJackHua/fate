@@ -66,18 +66,12 @@
       <!-- 出生地点（可选） -->
       <view class="form-item">
         <text class="form-label">出生地点（可选）</text>
-        <picker 
-          mode="region" 
-          :value="birthPlace"
-          @change="onPlaceChange"
-        >
-          <view class="picker-value">
-            <text :class="{ 'placeholder': !birthPlace.length }">
-              {{ birthPlace.length ? birthPlace.join(' ') : '请选择出生地点' }}
-            </text>
-            <text class="picker-arrow">›</text>
-          </view>
-        </picker>
+        <input
+          type="text"
+          v-model="birthPlaceInput"
+          placeholder="请输入出生城市，如：北京"
+          class="picker-value place-input"
+        />
       </view>
       
       <!-- 真太阳时校正 -->
@@ -142,7 +136,7 @@ import { ref, computed, onMounted } from 'vue'
 const birthDate = ref('')
 const birthTime = ref('')
 const gender = ref('')
-const birthPlace = ref([])
+const birthPlaceInput = ref('')
 const useTrueSolarTime = ref(true)
 
 // 历史记录
@@ -180,11 +174,6 @@ const onTimeChange = (e) => {
 // 性别选择
 const selectGender = (selectedGender) => {
   gender.value = selectedGender
-}
-
-// 地点选择
-const onPlaceChange = (e) => {
-  birthPlace.value = e.detail.value
 }
 
 // 开关切换
@@ -322,7 +311,14 @@ const clearHistory = () => {
     background: $bg-secondary;
     border-radius: $border-radius-md;
     border: 2rpx solid rgba($secondary, 0.3);
-    
+
+    &.place-input {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: $font-size-md;
+      color: $text-primary;
+    }
+
     text {
       font-size: $font-size-md;
       color: $text-primary;
