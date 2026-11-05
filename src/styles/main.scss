@@ -1,0 +1,116 @@
+/* 全局样式 - 古典水墨风格 */
+
+/* 小程序 WXSS 不支持 * 通配选择器，用 page/view 做基础重置 */
+page,
+view,
+text,
+image {
+  box-sizing: border-box;
+}
+
+page {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-size: $font-size-md;
+  color: $text-primary;
+  background-color: $bg-primary;
+  line-height: 1.6;
+}
+
+/* 标题样式 */
+.title-text {
+  font-family: 'PingFang SC', 'Microsoft YaHei', serif;
+  font-weight: 600;
+  color: $primary;
+}
+
+/* 表单控件（小程序请用 class，勿用 a/button 标签选择器） */
+.form-input,
+.form-textarea {
+  font-family: inherit;
+  border: 2rpx solid $secondary;
+  border-radius: $border-radius-md;
+  padding: $spacing-sm $spacing-md;
+  background: white;
+  width: 100%;
+}
+
+/* 卡片样式 */
+.card {
+  background: white;
+  border-radius: $border-radius-lg;
+  padding: $spacing-lg;
+  box-shadow: $shadow-md;
+  margin-bottom: $spacing-md;
+  border: 2rpx solid rgba($accent, 0.2);
+}
+
+/* 宣纸纹理背景 */
+.xuan-paper {
+  background-color: $bg-primary;
+  background-image: radial-gradient(ellipse at 50% 50%, transparent 0%, rgba(0, 0, 0, 0.02) 100%);
+}
+
+/* 水墨晕染效果 */
+.ink-wash {
+  position: relative;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 200%;
+    height: 200%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(ellipse, rgba($primary, 0.05) 0%, transparent 70%);
+    pointer-events: none;
+    animation: inkSpread 3s ease-out;
+  }
+}
+
+@keyframes inkSpread {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0;
+  }
+}
+
+/* 淡入动画 */
+.fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20rpx);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 工具类 */
+.text-center {
+  text-align: center;
+}
+
+.text-accent {
+  color: $accent;
+}
+
+.text-secondary {
+  color: $text-secondary;
+}
+
+.mt-sm { margin-top: $spacing-sm; }
+.mt-md { margin-top: $spacing-md; }
+.mt-lg { margin-top: $spacing-lg; }
+.mb-sm { margin-bottom: $spacing-sm; }
+.mb-md { margin-bottom: $spacing-md; }
+.mb-lg { margin-bottom: $spacing-lg; }

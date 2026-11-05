@@ -1,0 +1,52 @@
+// 古典水墨风格配色
+$primary: #1a1a2e;           // 墨黑
+$secondary: #4a4a6a;         // 深灰蓝
+$accent: #c9a96e;            // 古铜金
+$accent-light: #e8d5b7;       // 浅金
+
+// 背景色
+$bg-primary: #f5f0e8;        // 宣纸米白
+$bg-secondary: #e8e0d0;      // 浅米色
+$bg-dark: #2c2c3a;           // 深色背景
+
+// 文字色
+$text-primary: #2c2c2c;       // 墨黑
+$text-secondary: #666666;     // 灰色
+$text-accent: #8b4513;       // 赭石
+
+// 五行颜色
+$metal-color: #d4af37;        // 金
+$wood-color: #228b22;        // 木
+$water-color: #1e90ff;       // 水
+$fire-color: #ff4500;        // 火
+$earth-color: #daa520;        // 土
+
+// 间距
+$spacing-xs: 8rpx;
+$spacing-sm: 16rpx;
+$spacing-md: 24rpx;
+$spacing-lg: 32rpx;
+$spacing-xl: 48rpx;
+
+// 字体大小
+$font-size-xs: 24rpx;
+$font-size-sm: 28rpx;
+$font-size-md: 32rpx;
+$font-size-lg: 36rpx;
+$font-size-xl: 40rpx;
+$font-size-xxl: 48rpx;
+
+// 圆角
+$border-radius-sm: 8rpx;
+$border-radius-md: 12rpx;
+$border-radius-lg: 16rpx;
+
+// 阴影
+$shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+$shadow-md: 0 4rpx 16rpx rgba(0, 0, 0, 0.12);
+$shadow-lg: 0 8rpx 32rpx rgba(0, 0, 0, 0.16);
+
+// 过渡
+$transition-fast: all 0.2s ease;
+$transition-normal: all 0.3s ease;
+$transition-slow: all 0.5s ease;
