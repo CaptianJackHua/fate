@@ -62,6 +62,13 @@
   "mp-toutiao": {
     "usingComponents": true
   },
+  "h5": {
+    "publicPath": "/fate/",
+    "router": {
+      "mode": "hash",
+      "base": "/fate/"
+    }
+  },
   "uniStatistics": {
     "enable": false
   },
