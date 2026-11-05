@@ -119,6 +119,9 @@
           评价准确度
         </TraditionalButton>
       </view>
+
+      <!-- 免责声明 -->
+      <Disclaimer />
     </view>
   </view>
 </template>
@@ -126,6 +129,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getAdviceByQuestionType } from '@/utils/liuyaoCalculator.js'
+import Disclaimer from '@/components/Disclaimer/index.vue'
 
 const loading = ref(true)
 const guaData = ref({})

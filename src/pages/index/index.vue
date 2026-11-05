@@ -61,7 +61,10 @@
         </view>
       </view>
     </view>
-    
+
+    <!-- 免责声明 -->
+    <Disclaimer />
+
     <!-- 底部装饰 -->
     <view class="footer-decoration">
       <view class="ink-wash-bottom"></view>
@@ -71,6 +74,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import Disclaimer from '@/components/Disclaimer/index.vue'
 
 const recentCalculations = ref([])
 

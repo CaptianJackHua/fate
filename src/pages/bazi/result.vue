@@ -165,6 +165,9 @@
           评价准确度
         </TraditionalButton>
       </view>
+
+      <!-- 免责声明 -->
+      <Disclaimer />
     </view>
   </view>
 </template>
@@ -172,6 +175,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { calculateBaZi } from '@/utils/baziCalculator.js'
+import Disclaimer from '@/components/Disclaimer/index.vue'
 
 const loading = ref(true)
 const baziData = ref({})
